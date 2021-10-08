@@ -33,8 +33,9 @@ function error = CalcDistError(dh)
     %go through 9 poses to calculate the distance
     for i=1:9 
         poseT(i) = g8robot.fkine(theta(i,:));
-        CalcDist(i) = sqrt((poseT(i).t(1))^2 + (poseT(i).t(1))^2 + (poseT(i).t(1))^2);
+        CalcDist(i) = sqrt((poseT(i).t(1))^2 + (poseT(i).t(1))^2 + (poseT(i).t(1))^2)
     end
-
+    
+    errors = abs(CalcDist - MeasDist)
     error = mean(abs(CalcDist - MeasDist))
 end
