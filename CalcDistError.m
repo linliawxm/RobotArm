@@ -1,11 +1,18 @@
+%Objective function to calculate the end effector distance from the
+%clipboard coordinate system origin
+%
+%Input parameter:
+% dh = [a1 a2 d1 d2 d3 offset1 offset2 baseY]
+% a1 a2 d1 d2 d3: DH parameters
+% offset1 offset2: kinematic joint coordinate offsets
+% baseY: clipboard coordinate system translation on Y axis
+% a3,alpha1,alpha2, alpha3, offset3 are treated as fixed value
+% a3 = 0; alpha1 = 0; alpha2 = -90; alpha3 = 0; offset3 = 0;
 function error = CalcDistError(dh)
     %dh = [a1 a2 d1 d2 d3 offset1 offset2 baseY], other parameters are fixed,
-    %don't need to optimize
+    %     don't need to optimize
     clear L
     deg = pi/180;
-
-    %Load measured distance data and 3 joint angles from file
-    MeasData = load ('DistanceData.txt');
 
     %build parameter a
     a=[dh(1);dh(2);0];
@@ -26,8 +33,12 @@ function error = CalcDistError(dh)
          'offset',offset(3)*deg  );
     %Create the robot
     g8robot = SerialLink(L, 'name', 'G8 Robot Arm','base',[0,dh(8),0]);
-
+    
+    %Load measured distance data and 3 joint angles from file
+    MeasData = load ('DistanceData.txt');
+    %get the joint angles of each pose
     theta = deg2rad(MeasData(:,1:3));
+    %get the measured distance of each pose
     MeasDist = MeasData(:,4)';
 
     %go through 9 poses to calculate the distance
@@ -35,7 +46,7 @@ function error = CalcDistError(dh)
         poseT(i) = g8robot.fkine(theta(i,:));
         CalcDist(i) = sqrt((poseT(i).t(1))^2 + (poseT(i).t(1))^2 + (poseT(i).t(1))^2)
     end
-    
-    errors = abs(CalcDist - MeasDist)
+    %calculate the avearge error between calculated distance and
+    %measurement
     error = mean(abs(CalcDist - MeasDist))
 end
