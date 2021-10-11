@@ -2,15 +2,13 @@
 %clipboard coordinate system origin
 %
 %Input parameter:
-% dh = [a1 a2 d1 d2 d3 offset1 offset2 baseY]
+% dh = [a1 a2 d1 d2 d3 offset1 offset2]
 % a1 a2 d1 d2 d3: DH parameters
 % offset1 offset2: kinematic joint coordinate offsets
 % baseY: clipboard coordinate system translation on Y axis
 % a3,alpha1,alpha2, alpha3, offset3 are treated as fixed value
 % a3 = 0; alpha1 = 0; alpha2 = -90; alpha3 = 0; offset3 = 0;
 function error = CalcDistError(dh)
-    %dh = [a1 a2 d1 d2 d3 offset1 offset2 baseY], other parameters are fixed,
-    %     don't need to optimize
     clear L
     deg = pi/180;
 
@@ -32,8 +30,10 @@ function error = CalcDistError(dh)
     L(3) = Revolute('d', d(3), 'a', a(3), 'alpha', alpha(3)*deg,  ...
          'offset',offset(3)*deg  );
     %Create the robot
-    g8robot = SerialLink(L, 'name', 'G8 Robot Arm','base',[0,dh(8),0]);
-    
+    g8robot = SerialLink(L, 'name', 'G8 Robot Arm','base',transl(0,-0.08,0.047));
+    figure(2)
+    clf(2)
+    g8robot.plot([0,0,0]);
     %Load measured distance data and 3 joint angles from file
     MeasData = load ('DistanceData.txt');
     %get the joint angles of each pose
@@ -44,7 +44,7 @@ function error = CalcDistError(dh)
     %go through 9 poses to calculate the distance
     for i=1:9 
         poseT(i) = g8robot.fkine(theta(i,:));
-        CalcDist(i) = sqrt((poseT(i).t(1))^2 + (poseT(i).t(1))^2 + (poseT(i).t(1))^2)
+        CalcDist(i) = sqrt((poseT(i).t(1))^2 + (poseT(i).t(2))^2 + (poseT(i).t(3))^2);
     end
     %calculate the avearge error between calculated distance and
     %measurement
