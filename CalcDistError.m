@@ -1,6 +1,5 @@
 %Objective function to calculate the end effector distance from the
 %clipboard coordinate system origin
-%
 %Input parameter:
 % DH parameters of 3 links robot
 % dh = [a1 a2 a3;
