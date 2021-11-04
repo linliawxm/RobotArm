@@ -35,10 +35,10 @@ function error = CalcDistError(dh)
     
     %Create the robot
     g8robot = SerialLink(L, 'name', 'G8 Robot Arm','base',transl(baseX,baseY,baseZ));
-    figure(2)
-    clf(2)
-    Plot the robot
-    g8robot.plot([0,0,0]);
+    %figure(2)
+    %clf(2)
+    %Plot the robot
+    %g8robot.plot([0,0,0]);
     
     %Load measured distance data and 3 joint angles from file
     MeasData = load ('DistanceData.txt');
