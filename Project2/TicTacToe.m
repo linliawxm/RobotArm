@@ -24,7 +24,21 @@ classdef TicTacToe<handle
                   0   0.02  0.029;   %d1 d2 d3
                   -19 18.5  0;      %offset1 offset2 offset2
                   0   -0.08 0.076]; %basex basey basez
-        
+         %definition of game board
+        grid = [0.16 -0.04 0.04 -0.04;  %x y direction(1:up;2:down;3:left;4:right)
+                0.16 -0.08 0.04 -0.08; 
+                0.12  0.00 0.12 -0.12; 
+                0.08  0.00 0.08 -0.12];
+        center = [0.14 -0.02 0 1 1;   %Sqaure1(x y z,row column)
+                  0.10 -0.02 0 2 1;   %Sqaure2
+                  0.06 -0.02 0 3 1;   %Sqaure3
+                  0.14 -0.06 0 1 2;   %Sqaure4
+                  0.10 -0.06 0 2 2;   %Sqaure5
+                  0.06 -0.06 0 3 2;   %Sqaure6
+                  0.14 -0.10 0 1 3;   %Sqaure7
+                  0.10 -0.10 0 2 3;   %Sqaure8
+                  0.06 -0.10 0 3 3]   %Sqaure9
+        r=0.015; %unit=meter
         %Hardware related variables
         arduinoHW               %arduino hardware object
         pin                     %servo motor control pin
@@ -48,21 +62,7 @@ classdef TicTacToe<handle
         servoPwmRange = [5.75*10^-4, 2.46*10^-3; %min max
                          5.75*10^-4, 2.46*10^-3;
                          6.40*10^-4, 2.25*10^-3];
-        %definition of game board
-        grid = [0.16 -0.04 0.04 -0.04;  %x y direction(1:up;2:down;3:left;4:right)
-                0.16 -0.08 0.04 -0.08; 
-                0.12  0.00 0.12 -0.12; 
-                0.08  0.00 0.08 -0.12];
-        center = [0.14 -0.02 0 1 1;   %Sqaure1(x y z,row column)
-                  0.10 -0.02 0 2 1;   %Sqaure2
-                  0.06 -0.02 0 3 1;   %Sqaure3
-                  0.14 -0.06 0 1 2;   %Sqaure4
-                  0.10 -0.06 0 2 2;   %Sqaure5
-                  0.06 -0.06 0 3 2;   %Sqaure6
-                  0.14 -0.10 0 1 3;   %Sqaure7
-                  0.10 -0.10 0 2 3;   %Sqaure8
-                  0.06 -0.10 0 3 3]   %Sqaure9
-        r=0.015; %unit=meter
+       
         p000 = [0 0 0]           %Pose1
         p090 = [0 pi/2 0]        %Pose2
         p0_90 = [0 -pi/2 0]      %Pose3
