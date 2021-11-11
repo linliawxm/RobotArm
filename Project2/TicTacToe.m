@@ -45,7 +45,11 @@ classdef TicTacToe<handle
         jointServo1             %joint1 servo object
         jointServo2             %joint2 servo object
         jointServo3             %joint3 servo object
-        
+        %definition of servo Max PWM Signal Range
+        servoPwmRange = [5.75*10^-4, 2.46*10^-3; %min max
+                         5.75*10^-4, 2.46*10^-3;
+                         6.40*10^-4, 2.25*10^-3];
+                     
         %Game related variables    
         board = ones(3)*255;    %Initial game board, each cell initial value is 255
         step = 0                %game steps, less than 10
@@ -63,11 +67,7 @@ classdef TicTacToe<handle
         qlim = [-112 90; -90 112;0 165];
         %definition of servo Max Rotation degree
         servoRange = [202 202 165];
-        %definition of servo Max PWM Signal Range
-        servoPwmRange = [5.75*10^-4, 2.46*10^-3; %min max
-                         5.75*10^-4, 2.46*10^-3;
-                         6.40*10^-4, 2.25*10^-3];
-       
+ 
         p000 = [0 0 0]           %Pose1
         p090 = [0 pi/2 0]        %Pose2
         p0_90 = [0 -pi/2 0]      %Pose3
@@ -81,9 +81,10 @@ classdef TicTacToe<handle
     end
     
     methods        
-        function obj = createRobot(obj)
-            %METHOD1 Summary of this method goes here
-            %   Detailed explanation goes here
+        function createRobot(obj)
+            %Create robot model
+            %Set Links paramters, then build robot using SerialLink, and
+            %plot it with intial pose
 
             % Define links of robot
             L(1) = Revolute('d', obj.DhPara(3,1), ...   % link length (Dennavit-Hartenberg notation)
@@ -105,107 +106,121 @@ classdef TicTacToe<handle
                 'offset',deg2rad(obj.DhPara(4,3)));
 
             %Build the robot model
-           obj.G8Robot = SerialLink(L, 'name', 'G8 Robot Arm', ...
+            obj.G8Robot = SerialLink(L, 'name', 'G8 Robot Arm', ...
                 'tool',transl(0,0,0), ...
                 'base',transl(obj.DhPara(5,1), obj.DhPara(5,2),obj.DhPara(5,3)));
-           obj.G8Robot.plot(obj.p000);
-           obj.T = obj.G8Robot.fkine(obj.p000);
-           obj.q = obj.p000;
+            %Plot robot in figure
+            obj.G8Robot.plot(obj.p000);
+            %Update T and q of robot
+            obj.T = obj.G8Robot.fkine(obj.p000);
+            obj.q = obj.p000;
+        end
+        
+        function plot(obj,q)
+            %Plot robot model
+            obj.G8Robot.plot(q);
+            %Update T and q of robot
+            obj.T = obj.G8Robot.fkine(q);
+            obj.q = q;
         end
         
         function [result,warnMsg]= connectRobot(obj, port, pin)
-            %METHOD1 Summary of this method goes here
-            %   Detailed explanation goes here
-            
+            %Connect with Arduino hardware and set up servo            
             result = 0;
-            try
-                obj.arduinoHW = arduino(port, 'Uno', 'Libraries', 'Servo');
-            catch ME
-                warnMsg = ["Connect failure","Indentifier:",ME.identifier,"Message:",ME.message]
-                result = 1;
-                return;
+            if isempty(obj.arduinoHW)
+                try
+                    %Connect with arduino hardware
+                    obj.arduinoHW = arduino(port, 'Uno', 'Libraries', 'Servo');
+                catch ME
+                    %Connection failed
+                    warnMsg = ["Connect failure","Indentifier:",ME.identifier,"Message:",ME.message];
+                    result = 1;
+                    return;
+                end
             end
             
             try
                 if isempty(obj.arduinoHW) == false
                     obj.jointServo1 = servo(obj.arduinoHW, pin{1}, ...
                         'MinPulseDuration', obj.servoPwmRange(1,1), 'MaxPulseDuration', obj.servoPwmRange(1,2));
-                    if isempty(obj.jointServo1) == false
-                        
-                        %clip data between joint limits
-                        angle1 = obj.clip(rad2deg(obj.q(1)),obj.qlim(1,1),obj.qlim(1,2));
-
-                        %change degree to servo input range(0,1)
-                        angle1 = (obj.qlim(1,2) - angle1)/obj.servoRange(1);
-                        %clip the data between 0 and 1
-                        angle1 = obj.clip(angle1,0,1);
-                        writePosition(obj.jointServo1, angle1);
-                    end
-                    
                     obj.jointServo2 = servo(obj.arduinoHW, pin{2}, ...
                         'MinPulseDuration', obj.servoPwmRange(2,1), 'MaxPulseDuration',obj.servoPwmRange(2,2));
-                    if isempty(obj.jointServo2) == false
-                        
-                        %clip data between joint limits
-                        angle2 = obj.clip(rad2deg(obj.q(2)),obj.qlim(2,1),obj.qlim(2,2));
-
-                        %change degree to servo input range(0,1)
-                        angle2 = (obj.qlim(2,2) - angle2)/obj.servoRange(2);
-                        %clip the data between 0 and 1
-                        angle2 = obj.clip(angle2,0,1);
-                        writePosition(obj.jointServo2, angle2);
-                    end
                     obj.jointServo3 = servo(obj.arduinoHW, pin{3}, ...
                         'MinPulseDuration', obj.servoPwmRange(3,1), 'MaxPulseDuration', obj.servoPwmRange(3,2));
-                    if isempty(obj.jointServo3) == false
-                        
-                        %clip data between joint limits
-                        angle3 = obj.clip(rad2deg(obj.q(3)),obj.qlim(3,1),obj.qlim(3,2));
-
-                        %change degree to servo input range(0,1)
-                        angle3 = (obj.qlim(3,2) - angle3)/obj.servoRange(3);
-                        %clip the data between 0 and 1
-                        angle3 = obj.clip(angle3,0,1);
-                        writePosition(obj.jointServo3, angle3);
-                    end
+                    %keep robot arm pose same as model
+                    controlMotor(obj,obj.q);
+                    turnPenUp(obj);
                 end
                 
             catch ME
+                %Servo connection failed
                 warnMsg = ["Servo failure","Indentifier:",ME.identifier,"Message:",ME.message]
                 result = 2;
                 return;
             end
            warnMsg = 'Arduino connected'
-           obj.q
-           controlMotor(obj,obj.q);
         end
         
         function drawGrid(obj,gridPoints)
-            %draw 4 lines
-%             for i = 1:1:4
-%                 obj.drawLine([gridPoints(i,1) gridPoints(i,2) 0],[gridPoints(i,3) gridPoints(i,4) 0]);
-%             end
+            %draw game board grid with 2 vertical lines and 2 horizontal
+            %lines
+            %for i = 1:1:4
+                %Draw lines using calculated trajectory, adjustment for 3rd
+                %joint
+                %obj.drawOldLine([gridPoints(i,1) gridPoints(i,2) 0],[gridPoints(i,3) gridPoints(i,4) 0]);
+            %end
             obj.drawLine("Left",[gridPoints(1,1) gridPoints(1,2) 0],[gridPoints(1,3) gridPoints(1,4) 0]);
             obj.drawLine("Right",[gridPoints(2,1) gridPoints(2,2) 0],[gridPoints(2,3) gridPoints(2,4) 0]);
             obj.drawLine("Upper",[gridPoints(3,1) gridPoints(3,2) 0],[gridPoints(3,3) gridPoints(3,4) 0]);
             obj.drawLine("Lower",[gridPoints(4,1) gridPoints(4,2) 0],[gridPoints(4,3) gridPoints(4,4) 0]);
         end
         
+        function drawTrajWithFile(obj, filename, color)
+            m = readmatrix(filename);
+            [rows, columns] = size(m);
+
+            %Move to the start point
+            turnPenUp(obj);
+            startPoint = [m(1,1) m(1,2) obj.T.t(3)];
+            movePenTo(obj,startPoint);
+            angle3 = m(1,6);
+            %clip the data between 0 and 1
+            angle3 = obj.clip(angle3,0,1);
+            turnPenDown(obj,angle3);
+
+            for i = 1:rows
+                if obj.isDrawMoveTraj
+                    %plot the trajectory
+                    plot3(m(i,1),m(i,2),0,'.','Color',color);
+                end
+                hold on
+                %update the robot model
+                qx = [m(i,3),m(i,4),m(i,5)];
+                obj.G8Robot.plot(qx);
+                %Drive motor to target position
+                obj.controlMotor(qx);
+                %update the real motor
+                if isempty(obj.jointServo3) == false
+                    writePosition(obj.jointServo3, m(i,6));
+                end
+                obj.q = qx;
+            end
+            obj.T = obj.G8Robot.fkine(qx);
+        end
+        
         function drawO(obj,square) 
             %Draw a circle on the board
             if ~obj.isUseFileTraj
                 %calculate the points of circle
-                N = (0:0.5:40)'; 
+                N = (0:1:40)'; 
                 theta = ( N/N(end) )*2*pi;
                 points = (obj.center(square,1:3) + obj.r*[cos(theta) sin(theta) zeros(size(theta))]);
 
-                angle3 = ones([1 size(theta)])*65;
-                angle3 = (obj.qlim(3,2) - angle3)/obj.servoRange(3);
-
+                angle3 = 0.111;
                 %Move to first point of circle
                 obj.turnPenUp();
                 obj.movePenTo([points(1,1), points(1,2), obj.T.t(3)]);
-                obj.turnPenDown(angle3(1));
+                obj.turnPenDown(angle3);
 
                 qx = obj.q;
                 Tx = obj.T;
@@ -227,9 +242,9 @@ classdef TicTacToe<handle
                        obj.G8Robot.plot(qx);
                        %control motors to target position
                        obj.controlMotor(qx);
-                       %update the real motor
+                       %control the 3rd joint servo
                        if isempty(obj.jointServo3) == false
-                           writePosition(obj.jointServo3, angle3(i));
+                           writePosition(obj.jointServo3, angle3);
                        end
 
                        %update robot properties
@@ -239,47 +254,20 @@ classdef TicTacToe<handle
                     else
                         %ikine optimization failed, skip this point
                     end
+                    %record the trajectory
                     if obj.isRecordTraj
-                        m(i,:) = [points(i,1) points(i,2) qx(1) qx(2) qx(3) angle3(i)];
+                        m(i,:) = [points(i,1) points(i,2) qx(1) qx(2) qx(3) angle3];
                     end
                 end
-
+                %save the trajectory into file
                 if obj.isRecordTraj
                     filename = sprintf("Circle%d.txt", square);
                     writematrix(roundn(m,-4),filename);
                 end
             else
-                filename = sprintf("Circle%d.txt", square)
-                m = readmatrix(filename);
-                [rows, columns] = size(m);
-                
-                %Move to the start point
-                turnPenUp(obj);
-                startPoint = [m(1,1) m(1,2) obj.T.t(3)];
-                movePenTo(obj,startPoint);
-                angle3 = m(1,6);
-                %clip the data between 0 and 1
-                angle3 = obj.clip(angle3,0,1);
-                turnPenDown(obj,angle3);
-                
-                for i = 1:rows
-                    if obj.isDrawMoveTraj
-                        %plot the trajectory
-                        plot3(m(i,1),m(i,2),0,'.','Color','black');
-                    end
-                    hold on
-                    %update the robot model
-                    qx = [m(i,3),m(i,4),m(i,5)];
-                    obj.G8Robot.plot(qx);
-                    %Drive motor to target position
-                    obj.controlMotor(qx);
-                    %update the real motor
-                    if isempty(obj.jointServo3) == false
-                        writePosition(obj.jointServo3, m(i,6));
-                    end
-                    obj.q = qx;
-                end
-                obj.T = obj.G8Robot.fkine(qx);
+                %Draw circle trajectory using data from file
+                filename = sprintf("Circle%d.txt", square);
+                drawTrajWithFile(obj, filename, "blue");
             end
             obj.turnPenUp();
             
@@ -296,7 +284,7 @@ classdef TicTacToe<handle
                 x = obj.center(square,1)-obj.r:0.001:obj.center(square,1)+obj.r;
                 y1 = x-obj.center(square,1)+obj.center(square,2);
                 y2 = -x+obj.center(square,1)+obj.center(square,2);
-
+                angle3 = 0.111;
                 %Move to first point of first line
                 obj.turnPenUp();
                 obj.movePenTo([x(1), y1(1),obj.T.t(3)]);
@@ -324,7 +312,7 @@ classdef TicTacToe<handle
                         obj.controlMotor(qx);
                         %update the pen motor
                         if isempty(obj.jointServo3) == false
-                            writePosition(obj.jointServo3, 0.5);
+                            writePosition(obj.jointServo3, angle3);
                         end
                        
                         %update robot properties
@@ -335,7 +323,7 @@ classdef TicTacToe<handle
                         %ikine optimization failed, skip this point
                     end
                     if obj.isRecordTraj
-                        m(i,:) = [x(i),y1(i) qx(1) qx(2) qx(3) 0.5];
+                        m(i,:) = [x(i),y1(i) qx(1) qx(2) qx(3) angle3];
                     end
                 end
 
@@ -366,7 +354,7 @@ classdef TicTacToe<handle
                         obj.controlMotor(qx);
                         %update the pen motor
                         if isempty(obj.jointServo3) == false
-                            writePosition(obj.jointServo3, 0.5);
+                            writePosition(obj.jointServo3, angle3);
                         end
                         %update robot properties
                         obj.q = qx;
@@ -375,44 +363,15 @@ classdef TicTacToe<handle
                     else
                         %ikine optimization failed, skip this point
                     end
-                    m(len_x+i,:) = [x(i),y2(i) qx(1) qx(2) qx(3) 0.5];
+                    m(len_x+i,:) = [x(i),y2(i) qx(1) qx(2) qx(3) angle3];
                 end
                 if obj.isRecordTraj
                     filename = sprintf("Cross%d.txt", square);
                     writematrix(roundn(m,-4),filename);
                 end
             else
-                filename = sprintf("Cross%d.txt", square)
-                m = readmatrix(filename);
-                [rows, columns] = size(m);
-                
-                %Move to the start point
-                turnPenUp(obj);
-                startPoint = [m(1,1) m(1,2) obj.T.t(3)];
-                movePenTo(obj,startPoint);
-                angle3 = m(1,6);
-                %clip the data between 0 and 1
-                angle3 = obj.clip(angle3,0,1);
-                turnPenDown(obj,angle3);
-                
-                for i = 1:rows
-                    if obj.isDrawMoveTraj
-                        %plot the trajectory
-                        plot3(m(i,1),m(i,2),0,'.','Color','black');
-                    end
-                    hold on
-                    %update the robot model
-                    qx = [m(i,3),m(i,4),m(i,5)];
-                    obj.G8Robot.plot(qx);
-                    %Drive motor to target position
-                    obj.controlMotor(qx);
-                    %update the real motor
-                    if isempty(obj.jointServo3) == false
-                        writePosition(obj.jointServo3, m(i,6));
-                    end
-                    obj.q = qx;
-                end
-                obj.T = obj.G8Robot.fkine(qx);
+                filename = sprintf("Cross%d.txt", square);
+                drawTrajWithFile(obj, filename, "red");
             end
             obj.turnPenUp();
             
@@ -472,13 +431,9 @@ classdef TicTacToe<handle
             %get the joint angle using ikine
             Tf.t
             obj.q
-            test = 1
             qf = obj.G8Robot.ikine(Tf,'q0',obj.q,'mask',[1 1 1 0 0 0]);
-            test = 2
             if (isempty(qf) == false)
-                test = 3
-                [qx,qd,qdd]=mtraj(@tpoly, obj.q, qf, 20);
-                test = 4
+                [qx,qd,qdd]=mtraj(@tpoly, obj.q, qf, 8);
                 for i = 1:size(qx)
                     obj.q = qx(i,:);
                     obj.T = obj.G8Robot.fkine(obj.q);
@@ -525,37 +480,18 @@ classdef TicTacToe<handle
             %startPoint: [x, y, z]
             %endPoint:   [x, y, z]
             if ~obj.isUseFileTraj
-%                 if lineType == "Left"
-%                     startPoint = [obj.grid(1,1) obj.grid(1,2)];
-%                     endPoint = [obj.grid(1,3) obj.grid(1,4)];
-%                 elseif lineType == "Right"
-%                     startPoint = [obj.grid(2,1) obj.grid(2,2)];
-%                     endPoint = [obj.grid(2,3) obj.grid(2,4)];
-%                 elseif lineType == "Upper"
-%                     startPoint = [obj.grid(3,1) obj.grid(3,2)];
-%                     endPoint = [obj.grid(3,3) obj.grid(3,4)];
-%                 else %if lineType == "Lower"
-%                     startPoint = [obj.grid(4,1) obj.grid(4,2)];
-%                     endPoint = [obj.grid(4,3) obj.grid(4,4)];
-%                 end
-
                 %Compute the trajectory
                 x = linspace(startPoint(1),endPoint(1),40);
                 y = linspace(startPoint(2),endPoint(2),40);
 
                 %generate the trajectory points
                 p = [x;y;ones(1,length(x))*obj.T.t(3)]';
-                if (lineType == "Right") || (lineType == "Left")
-                    angle3 = linspace(45,100,40);
-                else %(lineType == "Upper") || (lineType == "Lower")
-                    angle3 = ones([1 40])*70;
-                end
-                angle3 = (obj.qlim(3,2) - angle3)/obj.servoRange(3);
-                
+
+                angle3 = 0.111;
                 %Move to the start point
                 turnPenUp(obj);
                 movePenTo(obj,startPoint);
-                turnPenDown(obj,angle3(1));
+                turnPenDown(obj,angle3);
                 
                 %draw the trajectory with p
                 %Initial transformation matrix and angles
@@ -580,9 +516,9 @@ classdef TicTacToe<handle
 
                         %Drive motor to target position
                         obj.controlMotor(qx);
-                        %update the real motor
+                        %update 3rd joint servo
                         if isempty(obj.jointServo3) == false
-                            writePosition(obj.jointServo3, angle3(i));
+                            writePosition(obj.jointServo3, angle3);
                         end
 
                         Tx = obj.G8Robot.fkine(qx);
@@ -592,54 +528,25 @@ classdef TicTacToe<handle
                     else
                         %skip this point, then try next point
                     end
-                    m(i,:) = [x(i) y(i) qx(1) qx(2) qx(3) angle3(i)];
+                    m(i,:) = [x(i) y(i) qx(1) qx(2) qx(3) angle3];
                 end
                 if obj.isRecordTraj
                     filename = sprintf("%sline.txt", lineType);
                     writematrix(roundn(m,-4),filename);
                 end
             else
-                filename = sprintf("%sline.txt", lineType)
-                m = readmatrix(filename);
-                [rows, columns] = size(m);
-                
-                %Move to the start point
-                turnPenUp(obj);
-                startPoint = [m(1,1) m(1,2) obj.T.t(3)]
-                movePenTo(obj,startPoint);
-                angle3 = m(1,6);
-                %clip the data between 0 and 1
-                angle3 = obj.clip(angle3,0,1);
-                turnPenDown(obj,angle3);
-                
-                for i = 1:rows
-                    if obj.isDrawMoveTraj
-                        %plot the trajectory
-                        plot3(m(i,1),m(i,2),0,'.','Color','black');
-                    end
-                    hold on
-                    %update the robot model
-                    qx = [m(i,3),m(i,4),m(i,5)];
-                    obj.G8Robot.plot(qx);
-                    %Drive motor to target position
-                    obj.controlMotor(qx);
-                    %update the real motor
-                    if isempty(obj.jointServo3) == false
-                        writePosition(obj.jointServo3, m(i,6));
-                    end
-                    obj.q = qx;
-                end
-                obj.T = obj.G8Robot.fkine(qx);
+                filename = sprintf("%sline.txt", lineType);
+                drawTrajWithFile(obj, filename, "black");
             end
             
             %At the end of drawing, turn pen up
             turnPenUp(obj);
         end
                 
-        function drawTraj(obj, p)
+        function m = drawTraj(obj, p, angle3, color)
             %draw trajectory with P (N x 3) matrix, N points of trajectory,
             %one point (x, y, z)
-            
+            m = zeros([size(p) 6]);
             %Initial transformation matrix and angles
             Tx = obj.T;
             qx = obj.q;
@@ -653,7 +560,7 @@ classdef TicTacToe<handle
                     qx = q_temp;
                     if obj.isDrawMoveTraj
                         %plot the trajectory
-                        plot3(Tx.t(1),Tx.t(2),0,'.','Color','black');
+                        plot3(Tx.t(1),Tx.t(2),0,'.','Color',color);
                     end
                     hold on
                     %update the robot model
@@ -661,7 +568,11 @@ classdef TicTacToe<handle
 
                     %Drive motor to target position
                     obj.controlMotor(qx);
-                    
+                    %update 3rd joint servo
+                    if isempty(obj.jointServo3) == false
+                        writePosition(obj.jointServo3, angle3);
+                    end
+                        
                     Tx = obj.G8Robot.fkine(qx);
                     %Update the robot joint angles and transformation matrix
                     obj.q = qx;
@@ -669,6 +580,7 @@ classdef TicTacToe<handle
                 else
                     %skip this point, then try next point
                 end
+                m(i,:) = [p(i,1) p(i,2) qx(1) qx(2) qx(3) angle3];
             end
         end
         
@@ -745,10 +657,119 @@ classdef TicTacToe<handle
             %obj.board have the info of current game
             %get empty space index info(random case)
             empty = find(obj.board == 255);
-            if isempty(empty) == false
-                position = empty(randi(length(empty)));
+            row_sum = transpose(sum(obj.board,2));
+            r1 = row_sum(1); % position 1 4 7
+            r2 = row_sum(2); % position 2 5 8
+            r3 = row_sum(3); % position 3 6 9
+            column_sum = sum(obj.board);
+            c1 = column_sum(1); % position 1 2 3
+            c2 = column_sum(2); % position 4 5 6
+            c3 = column_sum(3); % position 7 8 9
+            d1 = trace(obj.board); % position 1 5 9
+            d2 = trace(fliplr(obj.board)); % position 3 5 7
+
+            sum_set = [r1 r2 r3 c1 c2 c3 d1 d2];
+            position_set = [1 4 7; 2 5 8; 3 6 9; 1 2 3; 4 5 6; 7 8 9; 1 5 9; 3 5 7; ];
+            search_set = [obj.board(1,1) obj.board(1,2) obj.board(1,3);
+                obj.board(2,1) obj.board(2,2) obj.board(2,3);
+                obj.board(3,1) obj.board(3,2) obj.board(3,3);
+                obj.board(1,1) obj.board(2,1) obj.board(3,1);
+                obj.board(1,2) obj.board(2,2) obj.board(3,2);
+                obj.board(1,3) obj.board(2,3) obj.board(3,3);
+                obj.board(1,1) obj.board(2,2) obj.board(3,3);
+                obj.board(3,1) obj.board(2,2) obj.board(1,3);];
+            corner_set = [1 3 7 9];
+
+            if obj.board(2,2)==255
+                position = 5;
+            %     elseif board(2,2) == 1
+            %         position = corner_set(randi(4));
             else
-                position = 0;
+                onex = []; % a set to store the row or column that has 1 x and two empty cells.
+                for i=1:8
+                    % two key cases two x or two o in one single line
+                    % we will win
+                    if sum_set(i) == 255
+                        x = find(search_set(i,:) == 255);
+                        position = position_set(i,x(1));
+                        return
+                    % defence,otherwise we will loose 
+                    elseif sum_set(i) == 257
+                        y = find(search_set(i,:) == 255);
+                        position = position_set(i,y(1));
+                        return
+                    % check if there is a line with only one x in it, if so, record
+                    % them in onex. Because they may win on this line later, image
+                    % that we do not have a o in that line.So we want to put our o
+                    % in this line if possible.
+                    elseif sum_set(i) == 511
+                        onex(end+1)= i;
+                    end % end if                
+                end % end for loop
+
+                % for instance, this is a board and its corresponding cell number.             
+                % | 1   255  255  |         1  4  7
+                % |255   0   255  |         2  5  8
+                % |255   1   255  |         3  6  9
+                % onex = [1 3 4], row1 row3 colomn1 
+                % they have only one x and two empty cells, value = 511 =
+                % 255*2+1. for loop 1 to 3,use index onx(i) to find the
+                % postition of empty cells.
+                % onex_empty_flag = isempty(onex);
+
+                % if onex is empty, which means most cells have already been
+                % occupied, we need to randomly pick one empty cell.
+                onexemp = isempty(onex);
+                if isempty(onex) == true
+                    position = empty(randi(length(empty)));
+                else
+                    % if onex is not empty, we check if there are empty corner
+                    % cells on each line recored in onex. we increment the
+                    % frequency of each corner cell from 0 when we find the line's
+                    % empty corners (1 or 2) contain it.
+                    f1 = 0;
+                    f3 = 0;
+                    f7 = 0;
+                    f9 = 0;
+                    for i = 1:length(onex)
+                        % empty_index_set store the index of the empty cells
+                        % inside one line, while onex(i) is the line index in
+                        % the position set and search_set
+                        empty_index_set= find(search_set(onex(i),:)==255);                    
+                        % check empty corner cells
+                        % check highest frequency of each corner cell and pick that
+                        % one
+                        len1 = length(empty_index_set);
+                        for j = 1:len1
+                            p = position_set(onex(i),empty_index_set(j));
+                            if p == 1
+                                f1 = f1 + 1;
+                            elseif p == 3
+                                f3 = f3+ 1;
+                            elseif p == 7
+                                f7 = f7 + 1;
+                            elseif p == 9
+                                f9 = f9 + 1;
+
+                            end
+                        end
+                    end % end for loop
+                    f = [f1 f3 f7 f9];
+                    % one corner cells cannot be contained by more than two
+                    % lines. so we firstly check frequency at 2, then if no
+                    % corner is contained by two lines, check the frequency at
+                    % 1.
+                    f_index_set=find(f == 2);
+
+                    if isempty(f_index_set) == true
+                        f_index_set=find(f == 1);
+                    end
+                    selected_index = f_index_set(randi(length(f_index_set)));
+                    position = corner_set(selected_index);
+
+
+                end
+
             end
         end
 
