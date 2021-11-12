@@ -16,8 +16,8 @@ classdef TicTacToe<handle
     
     properties
         G8Robot SerialLink  %robot model object
-        q = [0 0 0];     %robot pose angles, [0 0 pi/2] is initial pose
-        T                   %robot current postion transformation matrix
+        q = [0 0 0];     %robot pose angles(radian), [0 0 0] is initial pose
+        T                %robot current postion transformation matrix
         %Initial DH parameters, can be improved by optimization
         DhPara = [0.103 0.09 0;      %a1 a2 a3
                   0   -90   0;      %alpha1 alpha2 alpha3
@@ -49,7 +49,11 @@ classdef TicTacToe<handle
         servoPwmRange = [5.75*10^-4, 2.46*10^-3; %min max
                          5.75*10^-4, 2.46*10^-3;
                          6.40*10^-4, 2.25*10^-3];
-                     
+        %definition of robot joint angle limits
+        qlim = [-112 90; -90 112;0 165];
+        %definition of servo Max Rotation degree
+        servoRange = [202 202 165];
+        
         %Game related variables    
         board = ones(3)*255;    %Initial game board, each cell initial value is 255
         step = 0                %game steps, less than 10
@@ -63,11 +67,6 @@ classdef TicTacToe<handle
     end
     
     properties (Constant)
-        %definition of robot joint angle limits
-        qlim = [-112 90; -90 112;0 165];
-        %definition of servo Max Rotation degree
-        servoRange = [202 202 165];
- 
         p000 = [0 0 0]           %Pose1
         p090 = [0 pi/2 0]        %Pose2
         p0_90 = [0 -pi/2 0]      %Pose3
@@ -222,51 +221,17 @@ classdef TicTacToe<handle
                 obj.movePenTo([points(1,1), points(1,2), obj.T.t(3)]);
                 obj.turnPenDown(angle3);
 
-                qx = obj.q;
-                Tx = obj.T;
-                for i = 1:1:size(theta)
-                    %Calculate current point position angles
-                    Tx.t(1) = points(i,1);
-                    Tx.t(2) = points(i,2);
-                    q_temp = obj.G8Robot.ikine(Tx,'q0',qx,"mask",[1 1 1 0 0 0]);
-                    if isempty(q_temp) == false
-                       qx= q_temp;
-
-                       %plot trajectory in the model
-                       hold on
-                       if obj.isDrawMoveTraj
-                           plot3(points(i,1),points(i,2),points(i,3),'.','Color','blue');
-                       end
-
-                       %re-plot robot model
-                       obj.G8Robot.plot(qx);
-                       %control motors to target position
-                       obj.controlMotor(qx);
-                       %control the 3rd joint servo
-                       if isempty(obj.jointServo3) == false
-                           writePosition(obj.jointServo3, angle3);
-                       end
-
-                       %update robot properties
-                       obj.q = qx;
-                       Tx = obj.G8Robot.fkine(qx);
-                       obj.T = Tx;
-                    else
-                        %ikine optimization failed, skip this point
-                    end
-                    %record the trajectory
-                    if obj.isRecordTraj
-                        m(i,:) = [points(i,1) points(i,2) qx(1) qx(2) qx(3) angle3];
-                    end
-                end
+                %draw first line trajectory with p
+                m = drawTraj(obj, points, angle3, "blue");
+                
                 %save the trajectory into file
                 if obj.isRecordTraj
-                    filename = sprintf("Circle%d.txt", square);
+                    filename = sprintf("Traj\\Circle%d.txt", square);
                     writematrix(roundn(m,-4),filename);
                 end
             else
                 %Draw circle trajectory using data from file
-                filename = sprintf("Circle%d.txt", square);
+                filename = sprintf("Traj\\Circle%d.txt", square);
                 drawTrajWithFile(obj, filename, "blue");
             end
             obj.turnPenUp();
@@ -277,7 +242,7 @@ classdef TicTacToe<handle
         end
         
         function drawX(obj,square)
-            %Draw a circle on the board
+            %Draw a cross on the board
             
             if ~obj.isUseFileTraj
                 %calculate the points of X
@@ -285,92 +250,36 @@ classdef TicTacToe<handle
                 y1 = x-obj.center(square,1)+obj.center(square,2);
                 y2 = -x+obj.center(square,1)+obj.center(square,2);
                 angle3 = 0.111;
+                m = zeros([ size(x)*2+2 6]);
+                p = [x;y1;ones(1,length(x))*obj.T.t(3)]';
+                
                 %Move to first point of first line
                 obj.turnPenUp();
                 obj.movePenTo([x(1), y1(1),obj.T.t(3)]);
                 obj.turnPenDown();
 
-                %draw first line of X
-                qx = obj.q;
-                Tx = obj.T;
-                len_x = length(x);
-                for i = 1:1:len_x
-                    %Calculate current point position angles
-                    Tx.t(1) = x(i);
-                    Tx.t(2) = y1(i);
-                    q_temp = obj.G8Robot.ikine(Tx,qx,"mask",[1 1 1 0 0 0]);
-                    if isempty(q_temp) == false
-                        qx= q_temp;
-
-                        hold on
-                        if obj.isDrawMoveTraj
-                            plot3(x(i),y1(i),0,'.','Color','red');
-                        end
-                        %re-plot robot model
-                        obj.G8Robot.plot(qx);
-                        %control motors to target position
-                        obj.controlMotor(qx);
-                        %update the pen motor
-                        if isempty(obj.jointServo3) == false
-                            writePosition(obj.jointServo3, angle3);
-                        end
-                       
-                        %update robot properties
-                        obj.q = qx;
-                        Tx = obj.G8Robot.fkine(qx);
-                        obj.T = Tx;
-                    else
-                        %ikine optimization failed, skip this point
-                    end
-                    if obj.isRecordTraj
-                        m(i,:) = [x(i),y1(i) qx(1) qx(2) qx(3) angle3];
-                    end
-                end
+                %draw first line trajectory with p
+                m(1:size(x),:) = drawTraj(obj, p, angle3, "red");
+                
 
                 %Move to first point of the second line
                 obj.turnPenUp();
+                m(size(x)+1,:) = m(size(x),:);
+                m(size(x)+1,6) = 1;   %Move pen up, for recording
                 obj.movePenTo([obj.center(square,1)-obj.r, obj.center(square,2)+obj.r, obj.T.t(3)]);
                 obj.turnPenDown();
-                %draw second line of X
-                %draw first line of X
-                qx = obj.q;
-                Tx = obj.T;
+                m(size(x)+2,:) = [obj.T(1) obj.T(2) obj.q(1) obj.q(2) obj.q(3) 1]; %Move pen up, for recording
                 
-                for i = 1:1:len_x
-                    %Calculate current point position angles
-                    Tx.t(1) = x(i);
-                    Tx.t(2) = y2(i);
-                    q_temp = obj.G8Robot.ikine(Tx,qx,"mask",[1 1 1 0 0 0]);
-                    if isempty(q_temp) == false
-                        qx= q_temp;
-
-                        hold on
-                        if obj.isDrawMoveTraj
-                            plot3(x(i),y2(i),0,'.','Color','red');
-                        end
-                        %re-plot robot model
-                        obj.G8Robot.plot(qx);
-                        %control motors to target position
-                        obj.controlMotor(qx);
-                        %update the pen motor
-                        if isempty(obj.jointServo3) == false
-                            writePosition(obj.jointServo3, angle3);
-                        end
-                        %update robot properties
-                        obj.q = qx;
-                        Tx = obj.G8Robot.fkine(qx);
-                        obj.T = Tx;
-                    else
-                        %ikine optimization failed, skip this point
-                    end
-                    m(len_x+i,:) = [x(i),y2(i) qx(1) qx(2) qx(3) angle3];
-                end
+                %draw second line trajectory with p
+                p = [x;y2;ones(1,length(x))*obj.T.t(3)]';
+                m(size(x)+2:size(x)*2+2,:) = drawTraj(obj, p, angle3, "red");
+                
                 if obj.isRecordTraj
-                    filename = sprintf("Cross%d.txt", square);
+                    filename = sprintf("Traj\\Cross%d.txt", square);
                     writematrix(roundn(m,-4),filename);
                 end
             else
-                filename = sprintf("Cross%d.txt", square);
+                filename = sprintf("Traj\\Cross%d.txt", square);
                 drawTrajWithFile(obj, filename, "red");
             end
             obj.turnPenUp();
@@ -452,29 +361,6 @@ classdef TicTacToe<handle
             end
         end
         
-        function drawOldLine(obj, startPoint, endPoint)
-            %draw a line on the board
-            %startPoint: [x, y, z]
-            %endPoint:   [x, y, z]
-            
-            %Move to the start point
-            turnPenUp(obj);
-            movePenTo(obj,startPoint);
-            turnPenDown(obj);
-            
-            %Compute the trajectory
-            x = linspace(startPoint(1),endPoint(1),40);
-            y = linspace(startPoint(2),endPoint(2),40);
-            
-            %generate the trajectory points
-            p = [x;y;ones(1,length(x))*obj.T.t(3)]'
-            %draw the trajectory with p
-            drawTraj(obj, p);
-            
-            %At the end of drawing, turn pen up
-            turnPenUp(obj);
-        end
-        
         function drawLine(obj, lineType,startPoint, endPoint)
             %draw a line on the board
             %startPoint: [x, y, z]
@@ -494,48 +380,13 @@ classdef TicTacToe<handle
                 turnPenDown(obj,angle3);
                 
                 %draw the trajectory with p
-                %Initial transformation matrix and angles
-                Tx = obj.T;
-                qx = obj.q;
-                %m = zeros([40 6]);
-                %Loop each point for angles, plot robot and control the servo
-                for i = 1:size(p)
-                    %Move the next point
-                    Tx.t(1) = p(i,1);
-                    Tx.t(2) = p(i,2);
-                    q_temp = obj.G8Robot.ikine(Tx,'q0',qx,'mask',[1 1 1 0 0 0]);
-                    if isempty(qx) == false
-                        qx = q_temp;
-                        if obj.isDrawMoveTraj
-                            %plot the trajectory
-                            plot3(Tx.t(1),Tx.t(2),0,'.','Color','black');
-                        end
-                        hold on
-                        %update the robot model
-                        obj.G8Robot.plot(qx);
-
-                        %Drive motor to target position
-                        obj.controlMotor(qx);
-                        %update 3rd joint servo
-                        if isempty(obj.jointServo3) == false
-                            writePosition(obj.jointServo3, angle3);
-                        end
-
-                        Tx = obj.G8Robot.fkine(qx);
-                        %Update the robot joint angles and transformation matrix
-                        obj.q = qx;
-                        obj.T = Tx;
-                    else
-                        %skip this point, then try next point
-                    end
-                    m(i,:) = [x(i) y(i) qx(1) qx(2) qx(3) angle3];
-                end
+                m = drawTraj(obj, p, angle3, "black");
                 if obj.isRecordTraj
-                    filename = sprintf("%sline.txt", lineType);
+                    filename = sprintf("Traj\\%sline.txt", lineType);
                     writematrix(roundn(m,-4),filename);
                 end
             else
-                filename = sprintf("%sline.txt", lineType);
+                filename = sprintf("Traj\\%sline.txt", lineType);
                 drawTrajWithFile(obj, filename, "black");
             end
             
@@ -546,7 +397,8 @@ classdef TicTacToe<handle
         function m = drawTraj(obj, p, angle3, color)
             %draw trajectory with P (N x 3) matrix, N points of trajectory,
             %one point (x, y, z)
-            m = zeros([size(p) 6]);
+            [rows columns] = size(p)
+            m = zeros([rows 6])
             %Initial transformation matrix and angles
             Tx = obj.T;
             qx = obj.q;
@@ -657,6 +509,7 @@ classdef TicTacToe<handle
             %obj.board have the info of current game
             %get empty space index info(random case)
             empty = find(obj.board == 255);
+           
             row_sum = transpose(sum(obj.board,2));
             r1 = row_sum(1); % position 1 4 7
             r2 = row_sum(2); % position 2 5 8
