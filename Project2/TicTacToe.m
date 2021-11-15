@@ -38,6 +38,9 @@ classdef TicTacToe<handle
                   0.14 -0.10 0 1 3;   %Sqaure7
                   0.10 -0.10 0 2 3;   %Sqaure8
                   0.06 -0.10 0 3 3]   %Sqaure9
+        
+        userWeight = [3 2 3 2 4 2 3 2 3];  %Initial weight for user on each point, one line/weight
+        robotWeight = [3 2 3 2 4 2 3 2 3]; %Initial weight for robot on each point, one line/weight
         r=0.01; %unit=meter
         %Hardware related variables
         arduinoHW               %arduino hardware object
@@ -59,6 +62,7 @@ classdef TicTacToe<handle
         step = 0                %game steps, less than 10
         state = "initial"       %game states: ready,running, done, terminated
         player = "user"         %whose turn to play
+        stepList = []           %record step location
         
         isRecordTraj = 1
         isDrawMoveTraj = 1
@@ -67,6 +71,17 @@ classdef TicTacToe<handle
     end
     
     properties (Constant)
+        positionMap = [1 4 7;2 5 8;3 6 9];
+        impactPosition = [2 3 4 5 7   9   255 255;
+                          1 3 5 8 255 255 255 255;
+                          1 2 5 6 7   9   255 255;
+                          1 5 6 7 255 255 255 255;
+                          1 2 3 4 6   7   8   9  ;
+                          3 4 5 9 255 255 255 255;
+                          1 3 4 5 8   9   255 255;
+                          2 5 7 9 255 255 255 255;
+                          1 3 5 6 7   8   255 255]
+        
         p000 = [0 0 0]           %Pose1
         p090 = [0 pi/2 0]        %Pose2
         p0_90 = [0 -pi/2 0]      %Pose3
@@ -188,10 +203,10 @@ classdef TicTacToe<handle
             turnPenDown(obj,angle3);
 
             for i = 1:rows
-                if obj.isDrawMoveTraj
-                    %plot the trajectory
-                    plot3(m(i,1),m(i,2),0,'.','Color',color);
-                end
+                
+                %plot the trajectory
+                plot3(m(i,1),m(i,2),0,'.','Color',color);
+                
                 hold on
                 %update the robot model
                 qx = [m(i,3),m(i,4),m(i,5)];
@@ -215,7 +230,7 @@ classdef TicTacToe<handle
                 theta = ( N/N(end) )*2*pi;
                 points = (obj.center(square,1:3) + obj.r*[cos(theta) sin(theta) zeros(size(theta))]);
 
-                angle3 = 0.111;
+                angle3 = 0.155;
                 %Move to first point of circle
                 obj.turnPenUp();
                 obj.movePenTo([points(1,1), points(1,2), obj.T.t(3)]);
@@ -239,6 +254,11 @@ classdef TicTacToe<handle
             %update board info
             obj.board(obj.center(square,4),obj.center(square,5)) = 0;
             obj.step = obj.step + 1;
+            obj.stepList(obj.step) =  square;
+            obj.updateWeight(square,"robot");
+            square
+            obj.userWeight
+            obj.robotWeight
         end
         
         function drawX(obj,square)
@@ -249,7 +269,7 @@ classdef TicTacToe<handle
                 x = obj.center(square,1)-obj.r:0.001:obj.center(square,1)+obj.r;
                 y1 = x-obj.center(square,1)+obj.center(square,2);
                 y2 = -x+obj.center(square,1)+obj.center(square,2);
-                angle3 = 0.111;
+                angle3 = 0.155;
                 m = zeros([ size(x)*2+2 6]);
                 p = [x;y1;ones(1,length(x))*obj.T.t(3)]';
                 
@@ -287,6 +307,11 @@ classdef TicTacToe<handle
             %update board info
             obj.board(obj.center(square,4),obj.center(square,5)) = 1;
             obj.step = obj.step + 1;
+            obj.stepList(obj.step) = square;
+            obj.updateWeight(square,"user");
+            square
+            obj.userWeight
+            obj.robotWeight
         end
   
         function turnPenUp(obj)
@@ -338,8 +363,6 @@ classdef TicTacToe<handle
             Tf.t(2) = location(2);
             %flag = 0;
             %get the joint angle using ikine
-            Tf.t
-            obj.q
             qf = obj.G8Robot.ikine(Tf,'q0',obj.q,'mask',[1 1 1 0 0 0]);
             if (isempty(qf) == false)
                 [qx,qd,qdd]=mtraj(@tpoly, obj.q, qf, 8);
@@ -373,7 +396,7 @@ classdef TicTacToe<handle
                 %generate the trajectory points
                 p = [x;y;ones(1,length(x))*obj.T.t(3)]';
 
-                angle3 = 0.111;
+                angle3 = 0.155;
                 %Move to the start point
                 turnPenUp(obj);
                 movePenTo(obj,startPoint);
@@ -410,10 +433,10 @@ classdef TicTacToe<handle
                 q_temp = obj.G8Robot.ikine(Tx,'q0',qx,'mask',[1 1 1 0 0 0]);
                 if isempty(qx) == false
                     qx = q_temp;
-                    if obj.isDrawMoveTraj
-                        %plot the trajectory
-                        plot3(Tx.t(1),Tx.t(2),0,'.','Color',color);
-                    end
+                    
+                    %plot the trajectory
+                    plot3(Tx.t(1),Tx.t(2),0,'.','Color',color);
+                    
                     hold on
                     %update the robot model
                     obj.G8Robot.plot(qx);
@@ -448,7 +471,7 @@ classdef TicTacToe<handle
                 %clip the data between 0 and 1
                 angle1 = obj.clip(angle1,0,1);
                 %control servo to right angle
-                writePosition(obj.jointServo1, angle1);
+                writePosition(obj.jointServo1, angle1); %0~1  0-202 degree
             end
 
             if isempty(obj.jointServo2) ==false
@@ -508,124 +531,170 @@ classdef TicTacToe<handle
         function position = computeNextMove(obj)
             %obj.board have the info of current game
             %get empty space index info(random case)
-            empty = find(obj.board == 255);
-           
-            row_sum = transpose(sum(obj.board,2));
-            r1 = row_sum(1); % position 1 4 7
-            r2 = row_sum(2); % position 2 5 8
-            r3 = row_sum(3); % position 3 6 9
-            column_sum = sum(obj.board);
-            c1 = column_sum(1); % position 1 2 3
-            c2 = column_sum(2); % position 4 5 6
-            c3 = column_sum(3); % position 7 8 9
-            d1 = trace(obj.board); % position 1 5 9
-            d2 = trace(fliplr(obj.board)); % position 3 5 7
-
-            sum_set = [r1 r2 r3 c1 c2 c3 d1 d2];
-            position_set = [1 4 7; 2 5 8; 3 6 9; 1 2 3; 4 5 6; 7 8 9; 1 5 9; 3 5 7; ];
-            search_set = [obj.board(1,1) obj.board(1,2) obj.board(1,3);
-                obj.board(2,1) obj.board(2,2) obj.board(2,3);
-                obj.board(3,1) obj.board(3,2) obj.board(3,3);
-                obj.board(1,1) obj.board(2,1) obj.board(3,1);
-                obj.board(1,2) obj.board(2,2) obj.board(3,2);
-                obj.board(1,3) obj.board(2,3) obj.board(3,3);
-                obj.board(1,1) obj.board(2,2) obj.board(3,3);
-                obj.board(3,1) obj.board(2,2) obj.board(1,3);];
-            corner_set = [1 3 7 9];
-
-            if obj.board(2,2)==255
-                position = 5;
-            %     elseif board(2,2) == 1
-            %         position = corner_set(randi(4));
-            else
-                onex = []; % a set to store the row or column that has 1 x and two empty cells.
-                for i=1:8
-                    % two key cases two x or two o in one single line
-                    % we will win
-                    if sum_set(i) == 255
-                        x = find(search_set(i,:) == 255);
-                        position = position_set(i,x(1));
-                        return
-                    % defence,otherwise we will loose 
-                    elseif sum_set(i) == 257
-                        y = find(search_set(i,:) == 255);
-                        position = position_set(i,y(1));
-                        return
-                    % check if there is a line with only one x in it, if so, record
-                    % them in onex. Because they may win on this line later, image
-                    % that we do not have a o in that line.So we want to put our o
-                    % in this line if possible.
-                    elseif sum_set(i) == 511
-                        onex(end+1)= i;
-                    end % end if                
-                end % end for loop
-
-                % for instance, this is a board and its corresponding cell number.             
-                % | 1   255  255  |         1  4  7
-                % |255   0   255  |         2  5  8
-                % |255   1   255  |         3  6  9
-                % onex = [1 3 4], row1 row3 colomn1 
-                % they have only one x and two empty cells, value = 511 =
-                % 255*2+1. for loop 1 to 3,use index onx(i) to find the
-                % postition of empty cells.
-                % onex_empty_flag = isempty(onex);
-
-                % if onex is empty, which means most cells have already been
-                % occupied, we need to randomly pick one empty cell.
-                onexemp = isempty(onex);
-                if isempty(onex) == true
-                    position = empty(randi(length(empty)));
+            centerPos = 5;
+            if obj.step == 0
+                %Robot first play
+                %Always start from positon 1(top left corner)
+                position = 1;
+                return;
+            end
+            if obj.step == 1
+                %User first play
+                if obj.stepList(1) == centerPos
+                    position = 1;
                 else
-                    % if onex is not empty, we check if there are empty corner
-                    % cells on each line recored in onex. we increment the
-                    % frequency of each corner cell from 0 when we find the line's
-                    % empty corners (1 or 2) contain it.
-                    f1 = 0;
-                    f3 = 0;
-                    f7 = 0;
-                    f9 = 0;
-                    for i = 1:length(onex)
-                        % empty_index_set store the index of the empty cells
-                        % inside one line, while onex(i) is the line index in
-                        % the position set and search_set
-                        empty_index_set= find(search_set(onex(i),:)==255);                    
-                        % check empty corner cells
-                        % check highest frequency of each corner cell and pick that
-                        % one
-                        len1 = length(empty_index_set);
-                        for j = 1:len1
-                            p = position_set(onex(i),empty_index_set(j));
-                            if p == 1
-                                f1 = f1 + 1;
-                            elseif p == 3
-                                f3 = f3+ 1;
-                            elseif p == 7
-                                f7 = f7 + 1;
-                            elseif p == 9
-                                f9 = f9 + 1;
-
-                            end
-                        end
-                    end % end for loop
-                    f = [f1 f3 f7 f9];
-                    % one corner cells cannot be contained by more than two
-                    % lines. so we firstly check frequency at 2, then if no
-                    % corner is contained by two lines, check the frequency at
-                    % 1.
-                    f_index_set=find(f == 2);
-
-                    if isempty(f_index_set) == true
-                        f_index_set=find(f == 1);
-                    end
-                    selected_index = f_index_set(randi(length(f_index_set)));
-                    position = corner_set(selected_index);
-
-
+                    position = centerPos;
                 end
-
+                return;
+            end
+            if obj.step == 2
+                %Robot first play, this 2nd play of robot
+                if obj.stepList(2) == centerPos
+                    position = 9; %diagnal of 1st step
+                elseif obj.stepList(2) == 7
+                    position = 5;
+                else
+                    position = 7;
+                end
+                return;   
+            end
+            
+            %check if robot can win for next one step, two O with one
+            %empty on one line
+            [willWin, pos] = checkWillWin(obj,"robot");
+            if willWin
+               position = pos;
+               return
+            end
+            
+            %check if user can win for next one step, two X with one empty on one line
+            [willWin, pos] = checkWillWin(obj,"user");
+            if willWin
+               position = pos;
+               return
+            end
+            
+            if obj.step == 3
+                %User first play
+                %This is 2nd step of robot
+                if ((obj.stepList(1) == 1) || ...  %user played on Corner for 1st step, we played on center, choose edge
+                    (obj.stepList(1) == 3) || ...
+                    (obj.stepList(1) == 7) || ...
+                    (obj.stepList(1) == 9))
+                    if obj.stepList(3) == 2
+                        position =4;
+                    else
+                        position =2;
+                    end
+                    return
+                elseif obj.stepList(1) == centerPos
+                    if obj.stepList(3) == 9
+                        position = 3;
+                    else
+                        position = 9;
+                    end
+                    return
+                end
+                
+            end
+            
+            %if robot has weight >=2, choose the max weight position to play
+            if ~isempty(find(obj.robotWeight > 1, 1))
+                position = max(obj.robotWeight);
+            %if user has weight >=2, choose the max weight position to block it
+            elseif ~isempty(find(obj.userWeight > 1, 1))
+                position = max(obj.robotWeight);
+            %if no weight >= 2, randomly select max weight,actually it is weight 1
+            else
+                position = max(obj.robotWeight);
+            end
+            return    
+        end
+        
+        function [willWin, position] = checkWillWin(obj, who)
+            %Check if there is two cell of a line has same X or O with
+            %another empty cell
+            if who == "user"
+                value = 1;
+            else
+                value = 0;
+            end
+            winValue = 255 + value*2;
+           
+            %calculate column line sum
+            column_sum = sum(obj.board);
+            %calculate row line sum
+            row_sum = sum(obj.board,2);
+            %calculate diagonal line sum
+            diag1 = trace(obj.board);
+            %calculate reverse diagonal line sum
+            diag2 = trace(fliplr(obj.board));
+            
+            if ismember(winValue,column_sum)
+                willWin = true;
+                column = find(column_sum == winValue);
+                row = find(obj.board(:,column) == 255);
+            elseif ismember(winValue,row_sum)
+                willWin = true;
+                row = find(row_sum == winValue);
+                column = find(obj.board(row,:) == 255);
+            elseif (diag1 == winValue)
+                willWin = true;
+                if obj.board(1) == 255
+                    row = 1;
+                    column = 1;
+                elseif obj.board(5) == 255
+                    row = 2;
+                    column = 2;
+                else%if obj.board(9) == 255
+                    row = 3;
+                    column = 3;
+                end    
+            elseif (diag2 == winValue)
+                willWin = true;
+                if obj.board(7) == 255
+                    row = 1;
+                    column = 3;
+                elseif obj.board(5) == 255
+                    row = 2;
+                    column = 2;
+                else%if obj.board(3) == 255
+                    row = 3;
+                    column = 1;
+                end
+            else
+                willWin = false;
+            end
+            if willWin == true
+                position = obj.positionMap(row,column); 
+            else
+                position = 0;
             end
         end
-
+        
+        function updateWeight(obj, position, who)
+            if who == "user"
+                obj.userWeight(position) = 0;
+                %If user played this position, robot get 0 weight on this postion
+                obj.robotWeight(position) = 0;
+                %reduce weight 
+                for i = 1:8
+                    if obj.robotWeight(obj.impactPosition(i)) > 0
+                        obj.robotWeight(obj.impactPosition(i)) = obj.robotWeight(obj.impactPosition(i)) - 1;
+                    end
+                end
+            else
+                obj.robotWeight(position) = 0;
+                %If robot played this position, user get 0 weight on this postion
+                obj.userWeight(position) = 0;
+                %reduce weight 
+                for i = 1:8
+                    if (obj.impactPosition(i) ~= 255) && (obj.userWeight(obj.impactPosition(i)) > 0)
+                        obj.userWeight(obj.impactPosition(i)) = obj.userWeight(obj.impactPosition(i)) - 1;
+                    end
+                end
+            end
+        end
     end
 end
 
