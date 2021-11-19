@@ -65,8 +65,8 @@ classdef TicTacToe<handle
         stepList = []           %record step location
         
         isRecordTraj = 1
-        isDrawMoveTraj = 1
-        isUseFileTraj = 1
+        isDrawMoveTraj = 0
+        isUseFileTraj = 0
         
     end
     
@@ -138,7 +138,7 @@ classdef TicTacToe<handle
             obj.q = q;
         end
         
-        function [result,warnMsg]= connectRobot(obj, port, pin)
+        function [result,warnMsg]= connectHW(obj, port, pin)
             %Connect with Arduino hardware and set up servo            
             result = 0;
             if isempty(obj.arduinoHW)
@@ -195,8 +195,8 @@ classdef TicTacToe<handle
 
             %Move to the start point
             turnPenUp(obj);
-            startPoint = [m(1,1) m(1,2) obj.T.t(3)];
-            movePenTo(obj,startPoint);
+            startPoint = [m(1,3) m(1,4) obj.q(3)];
+            movePenTo(obj, startPoint, "angle");
             angle3 = m(1,6);
             %clip the data between 0 and 1
             angle3 = obj.clip(angle3,0,1);
@@ -230,10 +230,10 @@ classdef TicTacToe<handle
                 theta = ( N/N(end) )*2*pi;
                 points = (obj.center(square,1:3) + obj.r*[cos(theta) sin(theta) zeros(size(theta))]);
 
-                angle3 = 0.155;
+                angle3 = 0.2551;
                 %Move to first point of circle
                 obj.turnPenUp();
-                obj.movePenTo([points(1,1), points(1,2), obj.T.t(3)]);
+                obj.movePenTo([points(1,1), points(1,2), obj.T.t(3)], "coord");
                 obj.turnPenDown(angle3);
 
                 %draw first line trajectory with p
@@ -275,7 +275,7 @@ classdef TicTacToe<handle
                 
                 %Move to first point of first line
                 obj.turnPenUp();
-                obj.movePenTo([x(1), y1(1),obj.T.t(3)]);
+                obj.movePenTo([x(1), y1(1),obj.T.t(3)], "coord");
                 obj.turnPenDown();
 
                 %draw first line trajectory with p
@@ -286,7 +286,7 @@ classdef TicTacToe<handle
                 obj.turnPenUp();
                 m(size(x)+1,:) = m(size(x),:);
                 m(size(x)+1,6) = 1;   %Move pen up, for recording
-                obj.movePenTo([obj.center(square,1)-obj.r, obj.center(square,2)+obj.r, obj.T.t(3)]);
+                obj.movePenTo([obj.center(square,1)-obj.r, obj.center(square,2)+obj.r, obj.T.t(3)], "coord");
                 obj.turnPenDown();
                 m(size(x)+2,:) = [obj.T(1) obj.T(2) obj.q(1) obj.q(2) obj.q(3) 1]; %Move pen up, for recording
                 
@@ -335,11 +335,11 @@ classdef TicTacToe<handle
                 end
                 defaultSq = sq;
             else
-                defaultSq = 0.6;
+                defaultSq = 0.4111;
             end
             %update the model
             if isempty(obj.G8Robot) == false
-                obj.q(3) = defaultSq*(-pi/2);
+                obj.q(3) = defaultSq*(-pi*165/180);
                 obj.G8Robot.plot(obj.q);
             end
             %update the real motor
@@ -352,20 +352,23 @@ classdef TicTacToe<handle
             a = min(max(x,low),high);
         end
         
-        function movePenTo(obj, location)
+        function movePenTo(obj, location, locType)
             %Move pen from current location to target location(x,y)
             %Get start point T matrix
-            obj.q
-            Tf = obj.G8Robot.fkine(obj.q);
-            
-            %Set target position
-            Tf.t(1) = location(1);
-            Tf.t(2) = location(2);
-            %flag = 0;
-            %get the joint angle using ikine
-            qf = obj.G8Robot.ikine(Tf,'q0',obj.q,'mask',[1 1 1 0 0 0]);
+            if locType == "coord"
+                Tf = obj.G8Robot.fkine(obj.q);
+
+                %Set target position
+                Tf.t(1) = location(1);
+                Tf.t(2) = location(2);
+                %get the joint angle using ikine
+                qf = obj.G8Robot.ikine(Tf,'q0',obj.q,'mask',[1 1 1 0 0 0]);
+            else %if locType = "angle"
+                qf = location;
+            end
+
             if (isempty(qf) == false)
-                [qx,qd,qdd]=mtraj(@tpoly, obj.q, qf, 8);
+                [qx,qd,qdd]=mtraj(@tpoly, obj.q, qf, 20);
                 for i = 1:size(qx)
                     obj.q = qx(i,:);
                     obj.T = obj.G8Robot.fkine(obj.q);
@@ -399,7 +402,7 @@ classdef TicTacToe<handle
                 angle3 = 0.155;
                 %Move to the start point
                 turnPenUp(obj);
-                movePenTo(obj,startPoint);
+                movePenTo(obj,startPoint,"coord");
                 turnPenDown(obj,angle3);
                 
                 %draw the trajectory with p
@@ -420,8 +423,8 @@ classdef TicTacToe<handle
         function m = drawTraj(obj, p, angle3, color)
             %draw trajectory with P (N x 3) matrix, N points of trajectory,
             %one point (x, y, z)
-            [rows columns] = size(p)
-            m = zeros([rows 6])
+            [rows columns] = size(p);
+            m = zeros([rows 6]);
             %Initial transformation matrix and angles
             Tx = obj.T;
             qx = obj.q;
@@ -695,6 +698,8 @@ classdef TicTacToe<handle
                 end
             end
         end
+        
+        
     end
 end
 
